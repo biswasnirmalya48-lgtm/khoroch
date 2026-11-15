@@ -8,9 +8,11 @@
     "dev": "vite",
     "build": "vite build && esbuild worker/index.js --bundle --format=esm --platform=neutral --target=es2022 --outfile=worker-build/worker.js",
     "preview": "npm run build && npx wrangler dev --port 8787",
-    "typecheck": "node --check worker/index.js"
+    "typecheck": "node --check worker/index.js && node --check api/khoroch.js && node --check worker/db-libsql.js",
+    "api:local": "node scripts/local-api.mjs"
   },
   "dependencies": {
+    "@libsql/client": "^0.18.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

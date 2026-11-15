@@ -74,6 +74,41 @@ share instead of the flat's.
 Without a key the app works fully — only the natural-language box and the coach are disabled, and both
 say so plainly.
 
+## Deploy on Vercel (auto-deploy from GitHub)
+
+The API is written against D1's API shape, and `worker/db-libsql.js` adapts a libSQL client to that same
+shape, so this repository deploys to Vercel unchanged: `api/khoroch.js` runs the worker code as a Node
+function, and everything under `/api/*` is rewritten to it.
+
+```
+GitHub push ──► Vercel builds ──► static dist/  +  api/khoroch.js ──► Turso (libSQL)
+```
+
+1. Create a free database at [turso.tech](https://turso.tech) and copy two values:
+
+   ```bash
+   turso db create khoroch
+   turso db show khoroch --url          # → TURSO_DATABASE_URL
+   turso db tokens create khoroch       # → TURSO_AUTH_TOKEN
+   ```
+
+2. In Vercel: **Add New → Project → import this GitHub repository**. Framework is detected as Vite;
+   `vercel.json` sets the build command, output directory and the `/api` rewrite.
+3. Add environment variables in **Vercel → Settings → Environment Variables**:
+   `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `GROQ_API_KEY` (see `.env.example`).
+4. **Deploy.** After that every `git push` to `main` builds and publishes automatically.
+
+The schema creates itself on the first request. Without `TURSO_DATABASE_URL` the API answers `503` with
+that instruction instead of failing silently.
+
+### Test the Vercel API locally
+
+```bash
+npm run api:local    # same handler + a real libSQL file DB on http://127.0.0.1:8790
+```
+
+It reads `GROQ_API_KEY` from `.dev.vars` and keeps data in `.tmp/khoroch-local.db` (git-ignored).
+
 ## Deploy on Freebuff Sites
 
 ```bash

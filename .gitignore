@@ -10,3 +10,4 @@ worker-build/
 .site.json
 .groq-key
 *.log
+.tmp/
