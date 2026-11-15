@@ -83,6 +83,13 @@ export default function App() {
     loadMe();
   }, [loadMe]);
 
+  // A stored name can belong to a flat that was set up again; drop it instead of silently hiding the picker.
+  useEffect(() => {
+    if (!viewerId || !me?.authed) return;
+    const list = payload?.members || me?.members || [];
+    if (list.length > 0 && !list.some((m) => m.id === viewerId)) pickViewer('');
+  }, [viewerId, payload, me, pickViewer]);
+
   useEffect(() => {
     if (me?.authed) loadMonth(month);
   }, [me?.authed, month, loadMonth, viewerId]);
