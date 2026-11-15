@@ -8,4 +8,5 @@ worker-build/
 !.env.example
 .DS_Store
 .site.json
+.groq-key
 *.log
