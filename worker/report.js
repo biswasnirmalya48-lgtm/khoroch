@@ -64,10 +64,15 @@ function personMonth(rows, member, dim) {
 }
 const daysIn = (month) => new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate();
 
-export function todayISO() {
-  const now = new Date();
-  const offset = now.getTimezoneOffset() * 60000;
-  return new Date(now.getTime() - offset).toISOString().slice(0, 10);
+// The flat is in India: "today" must be the IST date, not the UTC one, or a late-night
+// entry lands on yesterday.
+export function todayISO(now = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(now);
 }
 
 export function monthSummary(expenses, month, members, viewerId) {

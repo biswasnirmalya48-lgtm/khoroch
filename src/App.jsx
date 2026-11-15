@@ -30,10 +30,18 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(false);
-  const [pickerSkipped, setPickerSkipped] = useState(false);
+  // "flat" is a real choice too, so picking the whole flat must not re-open the name screen.
+  const [whoChosen, setWhoChosen] = useState(() => {
+    try {
+      return window.localStorage.getItem('khoroch.who') !== null;
+    } catch {
+      return false;
+    }
+  });
   const [viewerId, setViewerId] = useState(() => {
     try {
-      return window.localStorage.getItem('khoroch.viewer') || '';
+      const stored = window.localStorage.getItem('khoroch.who');
+      return stored && stored !== 'flat' ? stored : '';
     } catch {
       return '';
     }
@@ -41,7 +49,9 @@ export default function App() {
 
   const pickViewer = useCallback((id) => {
     setViewerId(id || '');
+    setWhoChosen(true);
     try {
+      window.localStorage.setItem('khoroch.who', id || 'flat');
       if (id) window.localStorage.setItem('khoroch.viewer', id);
       else window.localStorage.removeItem('khoroch.viewer');
     } catch {
@@ -87,8 +97,17 @@ export default function App() {
   useEffect(() => {
     if (!viewerId || !me?.authed) return;
     const list = payload?.members || me?.members || [];
-    if (list.length > 0 && !list.some((m) => m.id === viewerId)) pickViewer('');
-  }, [viewerId, payload, me, pickViewer]);
+    if (list.length > 0 && !list.some((m) => m.id === viewerId)) {
+      setViewerId('');
+      setWhoChosen(false);
+      try {
+        window.localStorage.removeItem('khoroch.who');
+        window.localStorage.removeItem('khoroch.viewer');
+      } catch {
+        /* private mode */
+      }
+    }
+  }, [viewerId, payload, me]);
 
   useEffect(() => {
     if (me?.authed) loadMonth(month);
@@ -115,13 +134,13 @@ export default function App() {
   const viewer = members.find((m) => m.id === viewerId) || null;
   const currentMonth = todayMonth();
 
-  if (members.length > 1 && !viewerId && !pickerSkipped) {
+  if (members.length > 1 && !whoChosen) {
     return (
       <WhoAreYou
         members={members}
         household={me.household}
         onPick={pickViewer}
-        onSkip={() => setPickerSkipped(true)}
+        onSkip={() => pickViewer('')}
       />
     );
   }
