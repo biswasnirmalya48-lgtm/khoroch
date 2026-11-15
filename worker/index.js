@@ -216,7 +216,7 @@ async function route(request, env, url) {
   const members = await loadMembers(db, household.id);
 
   if (path === '/api/config' && method === 'GET') {
-    return json({ ai: aiConfigured(env), model: env.GROQ_MODEL || 'llama-3.3-70b-versatile', today: todayISO() });
+    return json({ ai: aiConfigured(env), model: env.GROQ_MODEL || 'openai/gpt-oss-120b', today: todayISO() });
   }
 
   if (path === '/api/members' && method === 'POST') {

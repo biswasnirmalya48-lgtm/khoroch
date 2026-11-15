@@ -61,7 +61,7 @@ The Groq key is only ever read inside the Worker:
 echo 'GROQ_API_KEY=your_key_here' > .dev.vars   # git-ignored
 ```
 
-Optional: `GROQ_MODEL` (default `llama-3.3-70b-versatile`), `GROQ_API_URL`.
+Optional: `GROQ_MODEL` (default `openai/gpt-oss-120b`), `GROQ_API_URL`.
 
 Without a key the app works fully — only the natural-language box and the coach are disabled, and both
 say so plainly.
