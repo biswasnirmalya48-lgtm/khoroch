@@ -2,6 +2,66 @@
 export const rs = (paise) => Math.round(paise) / 100;
 
 const monthOf = (d) => (d || '').slice(0, 7);
+
+// What one person actually carries for a single entry.
+export function shareOfPaise(expense, memberId) {
+  const amount = Number(expense.amount) || 0;
+  if (!memberId) return 0;
+  const split = Array.isArray(expense.split_with) ? expense.split_with : [];
+  if (!split.length) return expense.paid_by === memberId ? amount : 0;
+  if (!split.includes(memberId)) return 0;
+  return Math.round(amount / split.length);
+}
+
+function personMonth(rows, member, dim) {
+  if (!member) return null;
+  let paid = 0;
+  let share = 0;
+  let personal = 0;
+  let shared = 0;
+  let cash = 0;
+  let count = 0;
+  let smallCash = 0;
+  const daily = new Array(dim).fill(0);
+  const byCategory = new Map();
+
+  for (const e of rows) {
+    if (e.paid_by === member.id) paid += e.amount;
+    const mine = shareOfPaise(e, member.id);
+    if (!mine) continue;
+    count += 1;
+    share += mine;
+    if (Array.isArray(e.split_with) && e.split_with.length) shared += mine;
+    else personal += mine;
+    if (e.method === 'cash') {
+      cash += mine;
+      if (e.amount < 20000) smallCash += mine;
+    }
+    const day = Number((e.spent_on || '').slice(8, 10));
+    if (day >= 1 && day <= dim) daily[day - 1] += mine;
+    const cat = byCategory.get(e.category) || { category: e.category, amount: 0, count: 0 };
+    cat.amount += mine;
+    cat.count += 1;
+    byCategory.set(e.category, cat);
+  }
+
+  return {
+    id: member.id,
+    name: member.name,
+    paid: rs(paid),
+    share: rs(share),
+    personal: rs(personal),
+    shared: rs(shared),
+    cash: rs(cash),
+    online: rs(share - cash),
+    count,
+    smallCash: rs(smallCash),
+    daily: daily.map(rs),
+    byCategory: [...byCategory.values()]
+      .sort((a, b) => b.amount - a.amount)
+      .map((c) => ({ ...c, amount: rs(c.amount) }))
+  };
+}
 const daysIn = (month) => new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate();
 
 export function todayISO() {
@@ -10,7 +70,7 @@ export function todayISO() {
   return new Date(now.getTime() - offset).toISOString().slice(0, 10);
 }
 
-export function monthSummary(expenses, month, members) {
+export function monthSummary(expenses, month, members, viewerId) {
   const rows = expenses.filter((e) => monthOf(e.spent_on) === month);
   const total = rows.reduce((s, e) => s + e.amount, 0);
   const cash = rows.filter((e) => e.method === 'cash').reduce((s, e) => s + e.amount, 0);
@@ -61,11 +121,12 @@ export function monthSummary(expenses, month, members) {
     dailyAverage: rs(Math.round(total / daysElapsed)),
     paid: paid.map((p) => ({ ...p, amount: rs(p.amount) })),
     smallCash: rs(smallCash),
-    avgEntry: rs(rows.length ? Math.round(total / rows.length) : 0)
+    avgEntry: rs(rows.length ? Math.round(total / rows.length) : 0),
+    viewer: personMonth(rows, members.find((m) => m.id === viewerId), dim)
   };
 }
 
-export function yearData(expenses, year, members) {
+export function yearData(expenses, year, members, viewerId) {
   const rows = expenses.filter((e) => (e.spent_on || '').slice(0, 4) === String(year));
   const months = [];
   for (let m = 1; m <= 12; m += 1) {
@@ -102,7 +163,48 @@ export function yearData(expenses, year, members) {
     byCategory: [...byCategory.values()]
       .sort((a, b) => b.amount - a.amount)
       .map((c) => ({ ...c, amount: rs(c.amount) })),
-    paid: paid.sort((a, b) => b.amount - a.amount)
+    paid: paid.sort((a, b) => b.amount - a.amount),
+    viewer: yearViewer(rows, members.find((m) => m.id === viewerId))
+  };
+}
+
+function yearViewer(rows, member) {
+  if (!member) return null;
+  let paid = 0;
+  let share = 0;
+  let count = 0;
+  const months = [];
+  const byCategory = new Map();
+
+  for (const e of rows) {
+    const mine = shareOfPaise(e, member.id);
+    if (e.paid_by === member.id) paid += e.amount;
+    if (!mine) continue;
+    count += 1;
+    share += mine;
+    const cat = byCategory.get(e.category) || { category: e.category, amount: 0, count: 0 };
+    cat.amount += mine;
+    cat.count += 1;
+    byCategory.set(e.category, cat);
+  }
+
+  const monthKeys = [...new Set(rows.map((e) => monthOf(e.spent_on)))].sort();
+  for (let m = 1; m <= 12; m += 1) {
+    const key = `${(rows[0]?.spent_on || '').slice(0, 4)}-${String(m).padStart(2, '0')}`;
+    months.push({ month: key, share: rs(rows.filter((e) => monthOf(e.spent_on) === key).reduce((s, e) => s + shareOfPaise(e, member.id), 0)) });
+  }
+
+  return {
+    id: member.id,
+    name: member.name,
+    paid: rs(paid),
+    share: rs(share),
+    count,
+    months,
+    monthKeys,
+    byCategory: [...byCategory.values()]
+      .sort((a, b) => b.amount - a.amount)
+      .map((c) => ({ ...c, amount: rs(c.amount) }))
   };
 }
 

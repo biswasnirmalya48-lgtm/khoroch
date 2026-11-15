@@ -3,6 +3,8 @@ import { hashPasscode, verifyPasscode, makeSession, readSession, sessionCookie, 
 import { aiConfigured, aiParse, aiInsight } from './ai.js';
 import { monthSummary, yearData, balances, toCsv, todayISO, rs } from './report.js';
 
+const viewerOf = (value, members) => resolveMember(value, members)?.id || null;
+
 const CATEGORIES = ['Food', 'Groceries', 'Rent', 'Bills', 'Transport', 'Shopping', 'Health', 'Fun', 'Recharge', 'Other'];
 const MAX_MEMBERS = 8;
 
@@ -255,9 +257,11 @@ async function route(request, env, url) {
   if (path === '/api/summary' && method === 'GET') {
     const month = (url.searchParams.get('month') || todayISO().slice(0, 7)).slice(0, 7);
     if (!/^\d{4}-\d{2}$/.test(month)) return bad('Month must look like 2026-11.');
+    const viewer = viewerOf(url.searchParams.get('viewer'), members);
     const expenses = await loadExpenses(db, household.id);
     return json({
-      summary: monthSummary(expenses, month, members),
+      viewer,
+      summary: monthSummary(expenses, month, members, viewer),
       balances: balances(expenses, members),
       expenses: expenses.filter((e) => (e.spent_on || '').slice(0, 7) === month).slice(0, 400).map(serialize),
       members,
@@ -268,8 +272,9 @@ async function route(request, env, url) {
   if (path === '/api/year' && method === 'GET') {
     const year = (url.searchParams.get('year') || todayISO().slice(0, 4)).slice(0, 4);
     if (!/^\d{4}$/.test(year)) return bad('Year must look like 2026.');
+    const viewer = viewerOf(url.searchParams.get('viewer'), members);
     const expenses = await loadExpenses(db, household.id);
-    return json({ year: yearData(expenses, year, members) });
+    return json({ viewer, year: yearData(expenses, year, members, viewer) });
   }
 
   if (path === '/api/expenses' && method === 'POST') {
@@ -356,14 +361,15 @@ async function route(request, env, url) {
     const body = await readJson(request);
     const month = String(body?.month || todayISO().slice(0, 7)).slice(0, 7);
     if (!/^\d{4}-\d{2}$/.test(month)) return bad('Month must look like 2026-11.');
+    const viewer = viewerOf(body?.viewer, members);
     const expenses = await loadExpenses(db, household.id);
-    const summary = monthSummary(expenses, month, members);
+    const summary = monthSummary(expenses, month, members, viewer);
     const previousMonth = shiftMonth(month, -1);
-    const previousSummary = monthSummary(expenses, previousMonth, members);
+    const previousSummary = monthSummary(expenses, previousMonth, members, viewer);
     const insight = await aiInsight(env, {
       summary,
       members,
-      previous: previousSummary.count ? previousSummary.total : null,
+      previous: previousSummary.count ? (viewer ? previousSummary.viewer?.share : previousSummary.total) : null,
       householdName: household.name
     });
     return json(insight);

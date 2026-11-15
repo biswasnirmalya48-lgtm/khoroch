@@ -407,6 +407,11 @@ textarea { resize: vertical; }
 .stat-label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); margin-bottom: 4px; }
 .stat strong { font-size: 17px; font-variant-numeric: tabular-nums; font-family: var(--serif); font-weight: 400; }
 
+.viewer-card { display: flex; flex-direction: column; gap: 12px; border-color: rgba(201, 247, 111, 0.18); }
+.viewer-card .label { margin-bottom: 0; }
+.you-grid { margin-top: 2px; }
+.net-line { font-size: 13px; font-weight: 600; }
+.year-chips { margin-top: 18px; }
 .insight-card { border-color: rgba(124, 199, 255, 0.22); }
 .insight-headline { font-family: var(--serif); font-size: 23px; line-height: 1.25; margin-bottom: 12px; }
 .insight ul { display: flex; flex-direction: column; gap: 8px; padding-left: 0; }

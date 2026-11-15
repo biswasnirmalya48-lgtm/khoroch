@@ -29,6 +29,23 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(false);
+  const [viewerId, setViewerId] = useState(() => {
+    try {
+      return window.localStorage.getItem('khoroch.viewer') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const pickViewer = useCallback((id) => {
+    setViewerId(id || '');
+    try {
+      if (id) window.localStorage.setItem('khoroch.viewer', id);
+      else window.localStorage.removeItem('khoroch.viewer');
+    } catch {
+      /* private mode */
+    }
+  }, []);
 
   const notify = useCallback((message) => {
     setToast(message);
@@ -49,7 +66,7 @@ export default function App() {
   const loadMonth = useCallback(async (target) => {
     setLoading(true);
     try {
-      const data = await api.summary(target);
+      const data = await api.summary(target, viewerId);
       setPayload(data);
       setAiEnabled(Boolean(data.ai));
     } catch (err) {
@@ -58,7 +75,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [viewerId]);
 
   useEffect(() => {
     loadMe();
@@ -66,7 +83,7 @@ export default function App() {
 
   useEffect(() => {
     if (me?.authed) loadMonth(month);
-  }, [me?.authed, month, loadMonth]);
+  }, [me?.authed, month, loadMonth, viewerId]);
 
   const refresh = useCallback(() => loadMonth(month), [loadMonth, month]);
 
@@ -86,6 +103,7 @@ export default function App() {
     return <LoginScreen household={me.household} onDone={loadMe} />;
 
   const members = payload?.members || me.members || [];
+  const viewer = members.find((m) => m.id === viewerId) || null;
   const currentMonth = todayMonth();
 
   return (
@@ -135,6 +153,8 @@ export default function App() {
             loading={loading}
             month={month}
             members={members}
+            viewer={viewer}
+            onPickViewer={pickViewer}
             onDelete={async (id) => {
               await api.deleteExpense(id);
               notify('Entry removed');
@@ -148,6 +168,7 @@ export default function App() {
           <AddScreen
             members={members}
             aiEnabled={aiEnabled}
+            defaultPayer={viewerId}
             defaultMonth={month}
             notify={notify}
             onSaved={(count) => {
@@ -158,9 +179,9 @@ export default function App() {
           />
         )}
 
-        {tab === 'year' && <YearScreen members={members} month={month} />}
+        {tab === 'year' && <YearScreen members={members} month={month} viewerId={viewerId} pickViewer={pickViewer} />}
 
-        {tab === 'split' && <SplitScreen payload={payload} month={month} />}
+        {tab === 'split' && <SplitScreen payload={payload} month={month} viewer={viewer} pickViewer={pickViewer} />}
       </main>
 
       <nav className="tabbar">
@@ -180,6 +201,8 @@ export default function App() {
         <SettingsSheet
           me={me}
           members={members}
+          viewerId={viewerId}
+          onPickViewer={pickViewer}
           onClose={() => setSettingsOpen(false)}
           onChanged={async () => {
             await loadMe();

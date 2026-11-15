@@ -10,22 +10,26 @@ async function chat(env, system, user, maxTokens = 1200) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 30000);
   try {
+    const model = env.GROQ_MODEL || DEFAULT_MODEL;
+    const body = {
+      model,
+      temperature: 0.2,
+      max_tokens: maxTokens,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user }
+      ]
+    };
+    // gpt-oss models spend max_tokens on hidden reasoning first; keep it short so the JSON survives.
+    if (model.startsWith('openai/gpt-oss')) body.reasoning_effort = 'low';
     const res = await fetch(env.GROQ_API_URL || DEFAULT_URL, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         authorization: `Bearer ${env.GROQ_API_KEY}`
       },
-      body: JSON.stringify({
-        model: env.GROQ_MODEL || DEFAULT_MODEL,
-        temperature: 0.2,
-        max_tokens: maxTokens,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user }
-        ]
-      }),
+      body: JSON.stringify(body),
       signal: controller.signal
     });
     if (!res.ok) {
@@ -111,9 +115,11 @@ Reply with JSON only: {"headline":"...","points":["..."],"action":"..."}
 - headline: one short sentence about the month, under 16 words.
 - points: 2 to 3 observations, each under 20 words, each backed by a number from the data. Point out the biggest category, cash vs online behaviour, small cash spends, or how this month compares to the previous one if data is given.
 - action: one concrete, doable saving suggestion for next month, under 20 words.
-Never invent numbers that are not in the data. If spending is low and healthy, say so plainly.`;
+Never invent numbers that are not in the data. If spending is low and healthy, say so plainly.
+When a "you" object is present, the reader is that one person, not the whole flat: speak to them as "you", make your numbers and advice about their share and what they paid out of pocket, and use the flat figures only as background.`;
 
 export async function aiInsight(env, { summary, members, previous, householdName }) {
+  const viewer = summary.viewer;
   const payload = {
     flat: householdName,
     members: members.map((m) => m.name),
@@ -129,7 +135,19 @@ export async function aiInsight(env, { summary, members, previous, householdName
     by_category: summary.byCategory.map((c) => ({ category: c.category, rupees: c.amount, entries: c.count })),
     previous_month_total: previous ?? null
   };
-  const raw = await chat(env, SYSTEM_INSIGHT, JSON.stringify(payload), 600);
+  if (viewer) {
+    payload.you = {
+      name: viewer.name,
+      your_share_rupees: viewer.share,
+      you_paid_out_of_pocket_rupees: viewer.paid,
+      your_share_of_shared_bills_rupees: viewer.shared,
+      your_own_personal_spends_rupees: viewer.personal,
+      your_cash_rupees: viewer.cash,
+      your_small_cash_under_200_rupees: viewer.smallCash,
+      your_categories: viewer.byCategory.map((c) => ({ category: c.category, rupees: c.amount }))
+    };
+  }
+  const raw = await chat(env, SYSTEM_INSIGHT, JSON.stringify(payload), 1200);
   const parsed = parseJson(raw);
   return {
     headline: String(parsed.headline || '').slice(0, 200),

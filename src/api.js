@@ -24,12 +24,12 @@ export const api = {
   config: () => request('/config'),
   addMember: (body) => request('/members', { method: 'POST', body }),
   removeMember: (id) => request(`/members/${id}`, { method: 'DELETE' }),
-  summary: (month) => request(`/summary?month=${month}`),
-  year: (year) => request(`/year?year=${year}`),
+  summary: (month, viewer) => request(`/summary?month=${month}${viewer ? `&viewer=${encodeURIComponent(viewer)}` : ''}`),
+  year: (year, viewer) => request(`/year?year=${year}${viewer ? `&viewer=${encodeURIComponent(viewer)}` : ''}`),
   addExpenses: (items) => request('/expenses', { method: 'POST', body: { items } }),
   deleteExpense: (id) => request(`/expenses/${id}`, { method: 'DELETE' }),
   aiParse: (text) => request('/ai/parse', { method: 'POST', body: { text } }),
-  aiInsight: (month) => request('/ai/insight', { method: 'POST', body: { month } })
+  aiInsight: (month, viewer) => request('/ai/insight', { method: 'POST', body: { month, viewer } })
 };
 
 export const inr = (value, opts = {}) => {

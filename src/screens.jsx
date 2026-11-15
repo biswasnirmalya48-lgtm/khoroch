@@ -159,10 +159,11 @@ export function LoginScreen({ household, onDone }) {
 
 /* ------------------------------------------------------------------ month */
 
-export function MonthScreen({ payload, loading, month, members, onDelete, onGoAdd }) {
+export function MonthScreen({ payload, loading, month, members, viewer, onPickViewer, onDelete, onGoAdd }) {
   const [confirmId, setConfirmId] = useState(null);
   const summary = payload?.summary;
   const nameOf = useMemo(() => new Map(members.map((m) => [m.id, m.name])), [members]);
+  const viewerId = viewer?.id || '';
 
   if (!payload || !summary) {
     return (
@@ -175,24 +176,46 @@ export function MonthScreen({ payload, loading, month, members, onDelete, onGoAd
     );
   }
 
-  const maxCat = Math.max(...summary.byCategory.map((c) => c.amount), 1);
-  const maxDay = Math.max(...summary.daily, 1);
-  const cashPct = summary.total ? Math.round((summary.cash / summary.total) * 100) : 0;
+  const mine = summary.viewer || null;
+  const cats = mine ? mine.byCategory : summary.byCategory;
+  const daily = mine ? mine.daily : summary.daily;
+  const cash = mine ? mine.cash : summary.cash;
+  const onlineTotal = mine ? mine.online : summary.online;
+  const shown = mine ? mine.share : summary.total;
+  const smallCash = mine ? mine.smallCash : summary.smallCash;
+  const myNet = (payload.balances?.net || []).find((p) => p.id === viewerId)?.amount || 0;
+  const maxCat = Math.max(...cats.map((c) => c.amount), 1);
+  const maxDay = Math.max(...daily, 1);
+  const cashPct = shown ? Math.round((cash / shown) * 100) : 0;
   const isCurrent = month === todayMonth();
 
   return (
     <div className="stack-lg">
       <section className="hero">
-        <p className="eyebrow">{isCurrent ? 'Spent so far in' : 'Total for'} {monthLabel(month)}</p>
-        <h1 className="big-money">{inr(summary.total)}</h1>
+        <p className="eyebrow">
+          {mine ? `Your share · ${monthLabel(month)}` : `${isCurrent ? 'Spent so far in' : 'Total for'} ${monthLabel(month)}`}
+        </p>
+        <h1 className="big-money">{inr(shown)}</h1>
         <div className="hero-meta">
-          <span>{summary.count} {summary.count === 1 ? 'entry' : 'entries'}</span>
-          <span className="dot" />
-          <span>{inr(summary.dailyAverage)}/day</span>
-          {isCurrent && (
+          {mine ? (
             <>
+              <span>you paid {inr(mine.paid)}</span>
               <span className="dot" />
-              <span className="muted">heading to {inr(summary.projection)}</span>
+              <span className="muted">flat {inr(summary.total)}</span>
+              <span className="dot" />
+              <span>{mine.count} {mine.count === 1 ? 'entry' : 'entries'}</span>
+            </>
+          ) : (
+            <>
+              <span>{summary.count} {summary.count === 1 ? 'entry' : 'entries'}</span>
+              <span className="dot" />
+              <span>{inr(summary.dailyAverage)}/day</span>
+              {isCurrent && (
+                <>
+                  <span className="dot" />
+                  <span className="muted">heading to {inr(summary.projection)}</span>
+                </>
+              )}
             </>
           )}
         </div>
@@ -202,9 +225,58 @@ export function MonthScreen({ payload, loading, month, members, onDelete, onGoAd
           <div className="split-online" style={{ width: `${100 - cashPct}%` }} />
         </div>
         <div className="legend">
-          <span><i className="swatch cash" /> Cash {inr(summary.cash)}</span>
-          <span><i className="swatch online" /> Online {inr(summary.online)}</span>
+          <span><i className="swatch cash" /> Cash {inr(cash)}</span>
+          <span><i className="swatch online" /> Online {inr(onlineTotal)}</span>
         </div>
+      </section>
+
+      <section className="card viewer-card">
+        <span className="label">Whose money</span>
+        <div className="chips">
+          <button className={`chip small ${mine ? '' : 'on'}`} onClick={() => onPickViewer('')}>
+            Whole flat
+          </button>
+          {members.map((member) => (
+            <button
+              key={member.id}
+              className={`chip small ${viewerId === member.id ? 'on' : ''}`}
+              onClick={() => onPickViewer(member.id)}
+            >
+              {member.name}
+            </button>
+          ))}
+        </div>
+        {mine ? (
+          <>
+            <div className="stat-grid you-grid">
+              <div className="stat">
+                <span className="stat-label">You paid</span>
+                <strong>{inr(mine.paid)}</strong>
+              </div>
+              <div className="stat">
+                <span className="stat-label">Your share</span>
+                <strong>{inr(mine.share)}</strong>
+              </div>
+              <div className="stat">
+                <span className="stat-label">Of shared bills</span>
+                <strong>{inr(mine.shared)}</strong>
+              </div>
+              <div className="stat">
+                <span className="stat-label">Your own spends</span>
+                <strong>{inr(mine.personal)}</strong>
+              </div>
+            </div>
+            <p className={`net-line ${myNet > 0 ? 'pos' : myNet < 0 ? 'neg' : 'muted'}`}>
+              {myNet > 0
+                ? `The flat owes you ${inr(myNet)}`
+                : myNet < 0
+                  ? `You owe the flat ${inr(-myNet)}`
+                  : 'You are square with the flat'}
+            </p>
+          </>
+        ) : (
+          <p className="fineprint">Pick your name to see only your share of every bill.</p>
+        )}
       </section>
 
       <section className="card">
@@ -213,7 +285,7 @@ export function MonthScreen({ payload, loading, month, members, onDelete, onGoAd
           <span className="muted small">{summary.daysElapsed} of {summary.daysInMonth} days</span>
         </div>
         <div className="daybars">
-          {summary.daily.map((value, index) => (
+          {daily.map((value, index) => (
             <div key={index} className="daybar-wrap" title={`${index + 1}: ${inr(value)}`}>
               <div
                 className={`daybar ${value > 0 ? 'filled' : ''}`}
@@ -226,12 +298,12 @@ export function MonthScreen({ payload, loading, month, members, onDelete, onGoAd
 
       <section className="card">
         <div className="card-head">
-          <h2>Where it went</h2>
-          <span className="muted small">{summary.byCategory.length} categories</span>
+          <h2>{mine ? `Where your ${inr(mine.share)} went` : 'Where it went'}</h2>
+          <span className="muted small">{cats.length} categories</span>
         </div>
-        {summary.byCategory.length === 0 && <p className="muted small">Nothing recorded this month.</p>}
+        {cats.length === 0 && <p className="muted small">Nothing recorded this month.</p>}
         <ul className="cat-list">
-          {summary.byCategory.map((cat) => (
+          {cats.map((cat) => (
             <li key={cat.category}>
               <div className="cat-row">
                 <span className="cat-name">
@@ -248,15 +320,15 @@ export function MonthScreen({ payload, loading, month, members, onDelete, onGoAd
         </ul>
       </section>
 
-      {summary.smallCash > 0 && (
+      {smallCash > 0 && (
         <section className="card leak">
           <span className="leak-icon">🕳️</span>
           <div>
             <h3>Small cash leak</h3>
             <p>
-              {inr(summary.smallCash)} went out in cash spends under ₹200 — tea, auto, snacks. That is
+              {inr(smallCash)} went out in {mine ? 'your ' : ''}cash spends under ₹200 — tea, auto, snacks. That is
               {' '}
-              {summary.total ? Math.round((summary.smallCash / summary.total) * 100) : 0}% of the month.
+              {shown ? Math.round((smallCash / shown) * 100) : 0}% of {mine ? 'your month' : 'the month'}.
             </p>
           </div>
         </section>
@@ -293,8 +365,16 @@ export function MonthScreen({ payload, loading, month, members, onDelete, onGoAd
                 <strong>{expense.note || expense.category}</strong>
                 <span className="muted small">
                   {friendlyDate(expense.spent_on)} · {expense.method === 'cash' ? 'Cash' : 'Online'} ·{' '}
-                  {nameOf.get(expense.paid_by) || 'Someone'}
-                  {expense.split_with.length > 0 ? ` · split ${expense.split_with.length}` : ' · personal'}
+                  {expense.paid_by === viewerId ? 'You' : nameOf.get(expense.paid_by) || 'Someone'}
+                  {expense.split_with.length > 0
+                    ? ` · split ${expense.split_with.length}${
+                        viewerId && expense.split_with.includes(viewerId)
+                          ? ` · your ${inr(Math.round(expense.amount / expense.split_with.length))}`
+                          : viewerId
+                            ? ' · not yours'
+                            : ''
+                      }`
+                    : ' · personal'}
                 </span>
               </div>
               <span className="expense-amount">{inr(expense.amount)}</span>
@@ -323,17 +403,17 @@ export function MonthScreen({ payload, loading, month, members, onDelete, onGoAd
 
 /* -------------------------------------------------------------------- add */
 
-const blankDraft = (members, date) => ({
+const blankDraft = (members, date, payer) => ({
   amount: '',
   category: 'Food',
   method: 'online',
   note: '',
   spent_on: date,
-  paid_by: members[0]?.id || '',
+  paid_by: payer || members[0]?.id || '',
   split_with: members.map((m) => m.id)
 });
 
-export function AddScreen({ members, aiEnabled, defaultMonth, onSaved }) {
+export function AddScreen({ members, aiEnabled, defaultMonth, defaultPayer, onSaved }) {
   const [text, setText] = useState('');
   const [drafts, setDrafts] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -344,7 +424,8 @@ export function AddScreen({ members, aiEnabled, defaultMonth, onSaved }) {
   const date = todayDate();
   const monthDate = defaultMonth === todayMonth() ? date : `${defaultMonth}-01`;
 
-  const addBlank = () => setDrafts((prev) => [blankDraft(members, monthDate), ...prev]);
+  const addBlank = () =>
+    setDrafts((prev) => [blankDraft(members, monthDate, defaultPayer), ...prev]);
 
   const update = (index, patch) =>
     setDrafts((prev) => prev.map((draft, i) => (i === index ? { ...draft, ...patch } : draft)));
@@ -365,7 +446,7 @@ export function AddScreen({ members, aiEnabled, defaultMonth, onSaved }) {
         method: item.method,
         note: item.note,
         spent_on: item.spent_on,
-        paid_by: byName.get(String(item.paid_by || '').toLowerCase()) || members[0]?.id || '',
+        paid_by: byName.get(String(item.paid_by || '').toLowerCase()) || defaultPayer || members[0]?.id || '',
         split_with: item.split_with
           .map((name) => byName.get(String(name).toLowerCase()))
           .filter(Boolean)
@@ -567,7 +648,7 @@ export function AddScreen({ members, aiEnabled, defaultMonth, onSaved }) {
 
 /* ------------------------------------------------------------------- year */
 
-export function YearScreen({ members }) {
+export function YearScreen({ members, viewerId, pickViewer }) {
   const [year, setYear] = useState(Number(todayMonth().slice(0, 4)));
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -575,16 +656,19 @@ export function YearScreen({ members }) {
   useEffect(() => {
     let alive = true;
     api
-      .year(year)
+      .year(year, viewerId)
       .then((res) => alive && setData(res.year))
       .catch((err) => alive && setError(err.message));
     return () => {
       alive = false;
     };
-  }, [year]);
+  }, [year, viewerId]);
 
-  const maxMonth = Math.max(...(data?.months.map((m) => m.total) || [1]), 1);
-  const best = data ? [...data.months].sort((a, b) => b.total - a.total)[0] : null;
+  const mine = data?.viewer || null;
+  const bars = mine ? mine.months.map((m) => ({ month: m.month, total: m.share })) : data?.months || [];
+  const maxMonth = Math.max(...bars.map((m) => m.total), 1);
+  const best = bars.length ? [...bars].sort((a, b) => b.total - a.total)[0] : null;
+  const total = mine ? mine.share : data?.total || 0;
 
   return (
     <div className="stack-lg">
@@ -607,16 +691,43 @@ export function YearScreen({ members }) {
         {!data && <p className="muted small">Loading…</p>}
         {data && (
           <>
-            <h1 className="big-money">{inr(data.total)}</h1>
+            <p className="eyebrow">{mine ? `Your share · ${year}` : `Whole flat · ${year}`}</p>
+            <h1 className="big-money">{inr(total)}</h1>
             <div className="hero-meta">
-              <span>{plain(data.count)} entries</span>
-              <span className="dot" />
-              <span>Cash {inr(data.cash)}</span>
-              <span className="dot" />
-              <span>Online {inr(data.online)}</span>
+              {mine ? (
+                <>
+                  <span>you paid {inr(mine.paid)}</span>
+                  <span className="dot" />
+                  <span className="muted">flat {inr(data.total)}</span>
+                  <span className="dot" />
+                  <span>{plain(mine.count)} entries of yours</span>
+                </>
+              ) : (
+                <>
+                  <span>{plain(data.count)} entries</span>
+                  <span className="dot" />
+                  <span>Cash {inr(data.cash)}</span>
+                  <span className="dot" />
+                  <span>Online {inr(data.online)}</span>
+                </>
+              )}
+            </div>
+            <div className="chips year-chips">
+              <button className={`chip small ${mine ? '' : 'on'}`} onClick={() => pickViewer('')}>
+                Whole flat
+              </button>
+              {members.map((member) => (
+                <button
+                  key={member.id}
+                  className={`chip small ${viewerId === member.id ? 'on' : ''}`}
+                  onClick={() => pickViewer(member.id)}
+                >
+                  {member.name}
+                </button>
+              ))}
             </div>
             <div className="year-bars">
-              {data.months.map((month) => (
+              {bars.map((month) => (
                 <div className="year-bar-col" key={month.month} title={`${monthShort(month.month)}: ${inr(month.total)}`}>
                   <div className="year-bar-slot">
                     <div
@@ -646,7 +757,7 @@ export function YearScreen({ members }) {
             </a>
           </div>
           <ul className="cat-list">
-            {data.byCategory.map((cat) => (
+            {(mine ? mine.byCategory : data.byCategory).map((cat, index, list) => (
               <li key={cat.category}>
                 <div className="cat-row">
                   <span className="cat-name">
@@ -658,13 +769,15 @@ export function YearScreen({ members }) {
                 <div className="cat-track">
                   <div
                     className="cat-fill"
-                    style={{ width: `${Math.max(3, (cat.amount / (data.byCategory[0]?.amount || 1)) * 100)}%` }}
+                    style={{ width: `${Math.max(3, (cat.amount / (list[0]?.amount || 1)) * 100)}%` }}
                   />
                 </div>
               </li>
             ))}
           </ul>
-          {data.byCategory.length === 0 && <p className="muted small">Nothing recorded in {year}.</p>}
+          {(mine ? mine.byCategory : data.byCategory).length === 0 && (
+            <p className="muted small">Nothing recorded in {year}.</p>
+          )}
         </section>
       )}
 
@@ -690,19 +803,23 @@ export function YearScreen({ members }) {
 
 /* ------------------------------------------------------------------ split */
 
-export function SplitScreen({ payload, month }) {
+export function SplitScreen({ payload, month, viewer }) {
   const [insight, setInsight] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   if (!payload) return <p className="muted">Loading…</p>;
   const { balances, summary } = payload;
+  const myNet = viewer ? balances.net.find((p) => p.id === viewer.id)?.amount || 0 : 0;
+  const mySettlements = viewer
+    ? balances.settlements.filter((s) => s.from === viewer.name || s.to === viewer.name)
+    : [];
 
   const askAi = async () => {
     setBusy(true);
     setError('');
     try {
-      const data = await api.aiInsight(month);
+      const data = await api.aiInsight(month, viewer?.id || '');
       setInsight(data);
     } catch (err) {
       setError(err.message);
@@ -713,6 +830,37 @@ export function SplitScreen({ payload, month }) {
 
   return (
     <div className="stack-lg">
+      {viewer && (
+        <section className="card you-card">
+          <div className="card-head">
+            <h2>Your part · {viewer.name}</h2>
+            <span className={`pill ${myNet > 0 ? 'ok' : 'off'}`}>
+              {myNet > 0 ? 'owed to you' : myNet < 0 ? 'you owe' : 'square'}
+            </span>
+          </div>
+          <h1 className="big-money">{inr(Math.abs(myNet))}</h1>
+          <p className="fineprint">
+            {myNet > 0
+              ? 'The flat is carrying this much of your spending. They pay you.'
+              : myNet < 0
+                ? 'You have spent less than your share. You pay this back.'
+                : 'You have paid exactly your share. Nothing to settle.'}
+          </p>
+          <div className="settle">
+            <h3>Just your payments</h3>
+            {mySettlements.length === 0 && <p className="muted small">You are not in any pending settlement.</p>}
+            {mySettlements.map((settle, index) => (
+              <div className="settle-row" key={index}>
+                <span>{settle.from === viewer.name ? 'You' : settle.from}</span>
+                <span className="arrow">→</span>
+                <span>{settle.to === viewer.name ? 'you' : settle.to}</span>
+                <span className="mono">{inr(settle.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="card">
         <div className="card-head">
           <h2>Who owes whom</h2>
@@ -801,7 +949,7 @@ export function SplitScreen({ payload, month }) {
 
 /* --------------------------------------------------------------- settings */
 
-export function SettingsSheet({ me, members, onClose, onChanged, onLogout, notify }) {
+export function SettingsSheet({ me, members, viewerId, onPickViewer, onClose, onChanged, onLogout, notify }) {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -850,6 +998,22 @@ export function SettingsSheet({ me, members, onClose, onChanged, onLogout, notif
         </div>
 
         <div className="sheet-body">
+          <h3>This phone is</h3>
+          <div className="chips">
+            <button className={`chip small ${viewerId ? '' : 'on'}`} onClick={() => onPickViewer('')}>
+              Whole flat
+            </button>
+            {members.map((member) => (
+              <button
+                key={member.id}
+                className={`chip small ${viewerId === member.id ? 'on' : ''}`}
+                onClick={() => onPickViewer(member.id)}
+              >
+                {member.name}
+              </button>
+            ))}
+          </div>
+
           <h3>People</h3>
           <ul className="person-list compact">
             {members.map((member) => (

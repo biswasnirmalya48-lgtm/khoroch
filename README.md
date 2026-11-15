@@ -63,6 +63,14 @@ echo 'GROQ_API_KEY=your_key_here' > .dev.vars   # git-ignored
 
 Optional: `GROQ_MODEL` (default `openai/gpt-oss-120b`), `GROQ_API_URL`.
 
+## Whose money
+
+Tap a name under **Whose money** on the Month tab (or in Settings → *This phone is*) and the whole app
+switches to that person: your share of every bill, what you paid out of pocket, what you owe or are owed,
+and your own categories. A ₹500 fan split 4 ways counts as ₹125 for you. Choose **Whole flat** to go back to
+the shared totals. The same choice applies on the Year tab and to the AI coach, which then talks about your
+share instead of the flat's.
+
 Without a key the app works fully — only the natural-language box and the coach are disabled, and both
 say so plainly.
 
