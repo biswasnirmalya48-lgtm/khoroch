@@ -38,7 +38,7 @@ export const inr = (value, opts = {}) => {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: Number.isInteger(n) ? 0 : 2,
-    minimumFractionDigits: 0,
+    minimumFractionDigits: Number.isInteger(n) ? 0 : 2,
     ...opts
   }).format(n);
 };

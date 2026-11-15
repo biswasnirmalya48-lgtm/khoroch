@@ -213,6 +213,12 @@ export function MonthScreen({ payload, loading, month, members, viewer, onPickVi
               <span>{summary.count} {summary.count === 1 ? 'entry' : 'entries'}</span>
               <span className="dot" />
               <span>{inr(summary.dailyAverage)}/day</span>
+              {members.length > 1 && (
+                <>
+                  <span className="dot" />
+                  <span className="pos">{inr(summary.total / members.length)} per head</span>
+                </>
+              )}
               {isCurrent && (
                 <>
                   <span className="dot" />
@@ -385,7 +391,7 @@ export function MonthScreen({ payload, loading, month, members, viewer, onPickVi
                   {expense.split_with.length > 0
                     ? ` · split ${expense.split_with.length}${
                         viewerId && expense.split_with.includes(viewerId)
-                          ? ` · your ${inr(Math.round(expense.amount / expense.split_with.length))}`
+                          ? ` · your ${inr(expense.amount / expense.split_with.length)}`
                           : viewerId
                             ? ' · not yours'
                             : ''
