@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build && esbuild worker/index.js --bundle --format=esm --platform=neutral --target=es2022 --outfile=worker-build/worker.js",
     "preview": "npm run build && npx wrangler dev --port 8787",
-    "typecheck": "node --check worker/index.js && node --check api/khoroch.js && node --check worker/db-libsql.js",
+    "typecheck": "node --check worker/index.js && node --check worker/oauth.js && node --check worker/db-libsql.js && node --check api/khoroch.js",
     "api:local": "node scripts/local-api.mjs"
   },
   "dependencies": {

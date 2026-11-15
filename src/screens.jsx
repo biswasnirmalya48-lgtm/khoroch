@@ -109,10 +109,20 @@ export function SetupScreen({ onDone }) {
   );
 }
 
-export function LoginScreen({ household, onDone }) {
+const GOOGLE_MESSAGES = {
+  denied: 'Google sign-in was cancelled.',
+  state: 'That sign-in link expired. Tap Google again.',
+  failed: 'Google could not finish the sign-in. Try once more.',
+  notallowed: 'That Gmail is not on the flat’s guest list.',
+  nohousehold: 'Set up the flat first, then sign in with Google.',
+  off: 'Google sign-in is not switched on for this site.'
+};
+
+export function LoginScreen({ household, google, onDone }) {
   const [passcode, setPasscode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const googleNotice = GOOGLE_MESSAGES[new URLSearchParams(window.location.search).get('google')] || '';
 
   const submit = async (event) => {
     event.preventDefault();
@@ -134,8 +144,20 @@ export function LoginScreen({ household, onDone }) {
         <div className="auth-head">
           <div className="splash-mark small">৳</div>
           <h1>{household?.name || 'Your flat'}</h1>
-          <p>Enter the passcode to open the ledger.</p>
+          <p>{google ? 'Sign in with the Gmail you use for the flat.' : 'Enter the passcode to open the ledger.'}</p>
         </div>
+
+        {google && (
+          <>
+            <a className="google-btn" href="/api/auth/google/start">
+              <span className="google-g">G</span>
+              Continue with Google
+            </a>
+            <div className="or-line"><span>or use the passcode</span></div>
+          </>
+        )}
+        {googleNotice && <p className="error-text">{googleNotice}</p>}
+
         <form onSubmit={submit}>
           <label className="field">
             <span>Passcode</span>

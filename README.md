@@ -30,6 +30,27 @@ browser ──► Cloudflare Worker ──► D1 (SQLite)
   and one concrete thing to change.
 - **Private by default.** Data lives in your own D1 database. No accounts, no analytics, no ads.
 
+## Signing in
+
+Two ways in, both free:
+
+- **Google sign-in.** A "Continue with Google" button opens Google's consent screen and returns to
+  `/api/auth/google/callback`. The server exchanges the code, reads the verified email from the
+  `id_token` Google returns, checks it against `GOOGLE_ALLOWED_EMAILS`, then issues the same
+  `HttpOnly` session cookie the passcode uses. No library, no paid service.
+- **The flat passcode.** Still there, below the Google button, so nothing can lock you out.
+
+Setup (about five minutes, free):
+
+1. Google Cloud Console → **APIs & Services → Credentials → Create credentials → OAuth client ID →
+   Web application**.
+2. Authorised redirect URI — exactly one of these, matching where you run it:
+   - `https://<your-vercel-domain>/api/auth/google/callback`
+   - `http://localhost:8787/api/auth/google/callback` (local, for testing)
+3. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `GOOGLE_ALLOWED_EMAILS` (comma separated Gmails).
+
+Without those variables the button is hidden and the passcode works exactly as before.
+
 ## Access model
 
 One household per deployment. The first visitor sets the flat name, a passcode and the flatmates.

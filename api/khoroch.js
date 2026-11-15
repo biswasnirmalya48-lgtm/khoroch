@@ -54,12 +54,7 @@ export default async function handler(req, res) {
 
   try {
     const request = await toWebRequest(req, url);
-    const response = await worker.fetch(request, {
-      DB: getDb(),
-      GROQ_API_KEY: process.env.GROQ_API_KEY,
-      GROQ_MODEL: process.env.GROQ_MODEL,
-      GROQ_API_URL: process.env.GROQ_API_URL
-    });
+    const response = await worker.fetch(request, { ...process.env, DB: getDb() });
 
     res.statusCode = response.status;
     response.headers.forEach((value, key) => res.setHeader(key, value));

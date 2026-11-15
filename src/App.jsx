@@ -128,7 +128,7 @@ export default function App() {
 
   if (!me.setup) return <SetupScreen onDone={loadMe} />;
   if (!me.authed)
-    return <LoginScreen household={me.household} onDone={loadMe} />;
+    return <LoginScreen household={me.household} google={me.google} onDone={loadMe} />;
 
   const members = payload?.members || me.members || [];
   const viewer = members.find((m) => m.id === viewerId) || null;

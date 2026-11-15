@@ -1,5 +1,6 @@
 import { ensureSchema } from './db.js';
 import { hashPasscode, verifyPasscode, makeSession, readSession, sessionCookie, clearedCookie } from './auth.js';
+import { googleConfigured, googleAuthUrl, googleAccount, emailAllowed, allowedEmails, stateCookie, clearedStateCookie, STATE_COOKIE } from './oauth.js';
 import { aiConfigured, aiParse, aiInsight } from './ai.js';
 import { monthSummary, yearData, balances, toCsv, todayISO, rs } from './report.js';
 
@@ -15,6 +16,14 @@ const json = (data, status = 200, headers = {}) =>
   });
 
 const bad = (message, status = 400) => json({ error: message }, status);
+const redirectTo = (location, cookie) =>
+  new Response(null, { status: 303, headers: { location, ...(cookie ? { 'set-cookie': cookie } : {}) } });
+
+const cookieValue = (request, name) => {
+  const header = request.headers.get('cookie') || '';
+  const match = header.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
+  return match ? match[1] : '';
+};
 const uid = () => crypto.randomUUID();
 const nowISO = () => new Date().toISOString();
 const safeArray = (value) => {
@@ -126,7 +135,14 @@ async function route(request, env, url) {
     const household = await loadHousehold(db);
     if (!household) return json({ setup: false });
     const session = await readSession(request, household.session_secret);
-    if (!session || session.h !== household.id) return json({ setup: true, authed: false });
+    if (!session || session.h !== household.id) {
+      return json({
+        setup: true,
+        authed: false,
+        google: googleConfigured(env),
+        household: { id: household.id, name: household.name, currency: household.currency }
+      });
+    }
     const members = await loadMembers(db, household.id);
     return json({
       setup: true,
@@ -134,6 +150,44 @@ async function route(request, env, url) {
       household: { id: household.id, name: household.name, currency: household.currency },
       members
     });
+  }
+
+  if (path === '/api/auth/google/start' && method === 'GET') {
+    if (!googleConfigured(env)) return bad('Google sign-in is not switched on for this deployment.', 503);
+    const household = await loadHousehold(db);
+    if (!household) return bad('Set up the flat first.', 409);
+    if (!allowedEmails(env).length) {
+      return bad('Add GOOGLE_ALLOWED_EMAILS (comma separated) so only your flatmates can sign in.', 503);
+    }
+    const state = crypto.randomUUID().replace(/-/g, '');
+    const redirectUri = `${url.origin}/api/auth/google/callback`;
+    return redirectTo(googleAuthUrl(env, { redirectUri, state }), stateCookie(state));
+  }
+
+  if (path === '/api/auth/google/callback' && method === 'GET') {
+    if (!googleConfigured(env)) return redirectTo('/?google=off', clearedStateCookie());
+    const code = url.searchParams.get('code') || '';
+    const state = url.searchParams.get('state') || '';
+    const expected = cookieValue(request, STATE_COOKIE);
+    if (url.searchParams.get('error')) return redirectTo('/?google=denied', clearedStateCookie());
+    if (!code || !state || !expected || state !== expected) return redirectTo('/?google=state', clearedStateCookie());
+
+    const household = await loadHousehold(db);
+    if (!household) return redirectTo('/?google=nohousehold', clearedStateCookie());
+
+    let account;
+    try {
+      account = await googleAccount(env, { code, redirectUri: `${url.origin}/api/auth/google/callback` });
+    } catch {
+      return redirectTo('/?google=failed', clearedStateCookie());
+    }
+    if (!emailAllowed(env, account.email)) {
+      console.warn('google sign-in blocked for', account.email);
+      return redirectTo('/?google=notallowed', clearedStateCookie());
+    }
+
+    const token = await makeSession(household.session_secret, household.id);
+    return redirectTo('/?google=ok', `${sessionCookie(token)}; ${clearedStateCookie()}`);
   }
 
   if (path === '/api/setup' && method === 'POST') {
@@ -218,7 +272,12 @@ async function route(request, env, url) {
   const members = await loadMembers(db, household.id);
 
   if (path === '/api/config' && method === 'GET') {
-    return json({ ai: aiConfigured(env), model: env.GROQ_MODEL || 'openai/gpt-oss-120b', today: todayISO() });
+    return json({
+      ai: aiConfigured(env),
+      google: googleConfigured(env),
+      model: env.GROQ_MODEL || 'openai/gpt-oss-120b',
+      today: todayISO()
+    });
   }
 
   if (path === '/api/members' && method === 'POST') {
