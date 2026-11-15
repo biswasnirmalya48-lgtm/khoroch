@@ -1,0 +1,23 @@
+{
+  "name": "khoroch",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Khoroch — a shared flat expense tracker for cash and online spends, with AI quick-add.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && esbuild worker/index.js --bundle --format=esm --platform=neutral --target=es2022 --outfile=worker-build/worker.js",
+    "preview": "npm run build && npx wrangler dev --port 8787",
+    "typecheck": "node --check worker/index.js"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.2",
+    "esbuild": "^0.24.2",
+    "vite": "^5.4.8",
+    "wrangler": "^4.20.0"
+  }
+}
