@@ -8,6 +8,7 @@ import {
   SettingsSheet,
   Splash,
   SplitScreen,
+  WhoAreYou,
   YearScreen
 } from './screens.jsx';
 
@@ -29,6 +30,7 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [aiEnabled, setAiEnabled] = useState(false);
+  const [pickerSkipped, setPickerSkipped] = useState(false);
   const [viewerId, setViewerId] = useState(() => {
     try {
       return window.localStorage.getItem('khoroch.viewer') || '';
@@ -105,6 +107,17 @@ export default function App() {
   const members = payload?.members || me.members || [];
   const viewer = members.find((m) => m.id === viewerId) || null;
   const currentMonth = todayMonth();
+
+  if (members.length > 1 && !viewerId && !pickerSkipped) {
+    return (
+      <WhoAreYou
+        members={members}
+        household={me.household}
+        onPick={pickViewer}
+        onSkip={() => setPickerSkipped(true)}
+      />
+    );
+  }
 
   return (
     <div className="app">

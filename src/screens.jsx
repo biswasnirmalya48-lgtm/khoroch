@@ -184,6 +184,9 @@ export function MonthScreen({ payload, loading, month, members, viewer, onPickVi
   const shown = mine ? mine.share : summary.total;
   const smallCash = mine ? mine.smallCash : summary.smallCash;
   const myNet = (payload.balances?.net || []).find((p) => p.id === viewerId)?.amount || 0;
+  const mySettlements = viewer
+    ? (payload.balances?.settlements || []).filter((s) => s.from === viewer.name || s.to === viewer.name)
+    : [];
   const maxCat = Math.max(...cats.map((c) => c.amount), 1);
   const maxDay = Math.max(...daily, 1);
   const cashPct = shown ? Math.round((cash / shown) * 100) : 0;
@@ -273,6 +276,19 @@ export function MonthScreen({ payload, loading, month, members, viewer, onPickVi
                   ? `You owe the flat ${inr(-myNet)}`
                   : 'You are square with the flat'}
             </p>
+            {mySettlements.length > 0 && (
+              <div className="settle yours">
+                <h3>Who pays whom</h3>
+                {mySettlements.map((settle, index) => (
+                  <div className="settle-row" key={index}>
+                    <span>{settle.from === viewer.name ? 'You' : settle.from}</span>
+                    <span className="arrow">→</span>
+                    <span>{settle.to === viewer.name ? 'you' : settle.to}</span>
+                    <span className="mono">{inr(settle.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         ) : (
           <p className="fineprint">Pick your name to see only your share of every bill.</p>
@@ -397,6 +413,36 @@ export function MonthScreen({ payload, loading, month, members, viewer, onPickVi
           ))}
         </ul>
       </section>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------- who am i */
+
+export function WhoAreYou({ members, household, onPick, onSkip }) {
+  return (
+    <div className="auth">
+      <div className="auth-card">
+        <div className="auth-head">
+          <div className="splash-mark small">৳</div>
+          <h1>Which one is you?</h1>
+          <p>
+            {household?.name ? `${household.name} · ` : ''}
+            every bill then shows your share, and who pays whom.
+          </p>
+        </div>
+        <div className="who-grid">
+          {members.map((member) => (
+            <button key={member.id} className="who-chip" onClick={() => onPick(member.id)}>
+              <span className="avatar">{member.name.slice(0, 1).toUpperCase()}</span>
+              <span>{member.name}</span>
+            </button>
+          ))}
+        </div>
+        <button className="ghost wide who-skip" onClick={onSkip}>
+          Show the whole flat instead
+        </button>
+      </div>
     </div>
   );
 }

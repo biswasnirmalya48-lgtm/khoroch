@@ -64,7 +64,7 @@ Rules:
 - "category" must be one of: ${CATEGORIES.join(', ')}.
 - "method" is "cash" when the note says cash, "handed over", "notes", "change", or similar; otherwise "online" (UPI, GPay, PhonePe, Paytm, card, bank).
 - "paid_by" is the name of the member who paid. If unclear, use the first member listed.
-- "split_with" lists members sharing the cost. split / share / together / everyone / for the flat / all of us means every member. "just me", "personal", "only me" means an empty array. Mentioning specific names means only those members.
+- "split_with" lists members sharing the cost. When a flatmate paid for something, assume it is shared by every member unless the note says otherwise — "praloy paid 450 somewhere" means all members. split / share / together / everyone / for the flat / all of us also means every member. Return an empty array only when the note says "just me", "personal", "for myself", "only me", "my own". Mentioning specific names means only those members.
 - "spent_on" is YYYY-MM-DD, using the reference date for "today" or relative words like yesterday.
 - "note" is a short human label, at most 6 words.
 Return {"items":[{"amount":0,"category":"","method":"","note":"","paid_by":"","split_with":[],"spent_on":"YYYY-MM-DD"}]}

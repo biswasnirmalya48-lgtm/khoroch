@@ -407,6 +407,24 @@ textarea { resize: vertical; }
 .stat-label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); margin-bottom: 4px; }
 .stat strong { font-size: 17px; font-variant-numeric: tabular-nums; font-family: var(--serif); font-weight: 400; }
 
+.who-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.who-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+}
+.who-chip:hover { border-color: rgba(201, 247, 111, 0.45); }
+.who-skip { margin-top: 18px; }
+.settle.yours { margin-top: 4px; }
+
 .viewer-card { display: flex; flex-direction: column; gap: 12px; border-color: rgba(201, 247, 111, 0.18); }
 .viewer-card .label { margin-bottom: 0; }
 .you-grid { margin-top: 2px; }
