@@ -1,11 +1,39 @@
 // Serves dist/ and the /api handler from one Node process, using a libSQL file database.
 // Handy when wrangler dev is misbehaving, and for eyeballing the built UI.
 import http from 'node:http';
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { readFileSync, createReadStream, existsSync, statSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { createClient } from '@libsql/client';
-import { makeDb } from '../worker/db-libsql.js';
-import handler, { setDb } from '../api/khoroch.js';
+
+// Wrangler reads .dev.vars itself; here the handler looks at process.env,
+// so load the same file (plus the bare key file) before importing it.
+function loadVars(file) {
+  let text = '';
+  try {
+    text = readFileSync(file, 'utf8');
+  } catch {
+    return;
+  }
+  for (const line of text.split('\n')) {
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
+    if (!match) continue;
+    const value = match[2].trim().replace(/^["']|["']$/g, '');
+    if (value && !process.env[match[1]]) process.env[match[1]] = value;
+  }
+}
+
+loadVars('.dev.vars');
+loadVars('.env');
+if (!process.env.GROQ_API_KEY) {
+  try {
+    process.env.GROQ_API_KEY = readFileSync('.groq-key', 'utf8').trim();
+  } catch {
+    /* no key file */
+  }
+}
+
+const { makeDb } = await import('../worker/db-libsql.js');
+const { default: handler, setDb } = await import('../api/khoroch.js');
 
 const dbFile = process.env.PREVIEW_DB || '.tmp/preview.db';
 const port = Number(process.env.API_PORT) || 8791;
