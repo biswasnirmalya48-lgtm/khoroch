@@ -10,7 +10,9 @@ export function useCountUp(target, duration = 620) {
   useEffect(() => {
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     const from = shown.current;
-    if (reduce || from === to) {
+    // A background tab never gets animation frames, so settle immediately instead of
+    // leaving the figure reading zero.
+    if (reduce || document.hidden || from === to) {
       shown.current = to;
       setDisplay(to);
       return undefined;

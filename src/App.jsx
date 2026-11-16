@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, monthLabel, shiftMonth, todayMonth } from './api';
 import {
   AddScreen,
@@ -11,6 +11,71 @@ import {
   WhoAreYou,
   YearScreen
 } from './screens.jsx';
+
+// The comic cover: drone footage of a Superman mural, dimmed under the app, with
+// halftone dots and speed lines printed over it. Falls back to a still frame when
+// someone asks for less motion.
+function Stage() {
+  const videoRef = useRef(null);
+  const [motionOk, setMotionOk] = useState(true);
+
+  useEffect(() => {
+    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const update = () => setMotionOk(!query.matches);
+    update();
+    query.addEventListener?.('change', update);
+    return () => query.removeEventListener?.('change', update);
+  }, []);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return undefined;
+    const sync = () => {
+      if (document.hidden) video.pause();
+      else video.play().catch(() => {});
+    };
+    document.addEventListener('visibilitychange', sync);
+    return () => document.removeEventListener('visibilitychange', sync);
+  }, [motionOk]);
+
+  return (
+    <div className="stage" aria-hidden="true">
+      {motionOk ? (
+        <video
+          ref={videoRef}
+          className="stage-video"
+          src="/superman-720.mp4"
+          poster="/superman-poster.jpg"
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+        />
+      ) : (
+        <div className="stage-poster" />
+      )}
+      <div className="stage-scrim" />
+      <div className="stage-halftone" />
+      <div className="stage-lines" />
+    </div>
+  );
+}
+
+// A scrolling comic masthead so the page never sits still.
+function Ticker({ text }) {
+  const line = `★ ${text} ★`;
+  return (
+    <div className="ticker" aria-hidden="true">
+      <div className="ticker-track">
+        <span>{line}</span>
+        <span>{line}</span>
+        <span>{line}</span>
+        <span>{line}</span>
+      </div>
+    </div>
+  );
+}
 
 const TABS = [
   { id: 'month', label: 'Month', icon: '◔' },
@@ -123,19 +188,26 @@ export default function App() {
     []
   );
 
-  if (booting) return <Splash />;
-  if (!me) return <Splash message="Could not reach the ledger." />;
+  const shell = (content) => (
+    <>
+      <Stage />
+      {content}
+    </>
+  );
 
-  if (!me.setup) return <SetupScreen onDone={loadMe} />;
+  if (booting) return shell(<Splash />);
+  if (!me) return shell(<Splash message="Could not reach the ledger." />);
+
+  if (!me.setup) return shell(<SetupScreen onDone={loadMe} />);
   if (!me.authed)
-    return <LoginScreen household={me.household} google={me.google} onDone={loadMe} />;
+    return shell(<LoginScreen household={me.household} google={me.google} onDone={loadMe} />);
 
   const members = payload?.members || me.members || [];
   const viewer = members.find((m) => m.id === viewerId) || null;
   const currentMonth = todayMonth();
 
   if (members.length > 1 && !whoChosen) {
-    return (
+    return shell(
       <WhoAreYou
         members={members}
         household={me.household}
@@ -145,7 +217,7 @@ export default function App() {
     );
   }
 
-  return (
+  return shell(
     <div className="app">
       <header className="topbar">
         <div className="brand">
@@ -177,6 +249,8 @@ export default function App() {
           ⚙
         </button>
       </header>
+
+      <Ticker text={`Khoroch · ${monthLabel(month)} · ${me.household?.name || 'our flat'} · cash vs online · who owes whom`} />
 
       <main className="main" key={tab}>
         {error && (
