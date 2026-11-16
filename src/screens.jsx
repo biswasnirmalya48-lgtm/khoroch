@@ -241,7 +241,7 @@ export function MonthScreen({ payload, loading, month, members, viewer, onPickVi
               {members.length > 1 && (
                 <>
                   <span className="dot" />
-                  <span className="pos">{inr(summary.total / members.length)} per head</span>
+                  <span className="pos">≈ {inr(summary.perHead)} each</span>
                 </>
               )}
               {isCurrent && (
@@ -300,16 +300,25 @@ export function MonthScreen({ payload, loading, month, members, viewer, onPickVi
                 <strong>{inr(mine.personal)}</strong>
               </div>
             </div>
-            <p className={`net-line ${myNet > 0 ? 'pos' : myNet < 0 ? 'neg' : 'muted'}`}>
-              {myNet > 0
-                ? `The flat owes you ${inr(myNet)}`
-                : myNet < 0
-                  ? `You owe the flat ${inr(-myNet)}`
-                  : 'You are square with the flat'}
+            <p className={`net-line ${mine.net > 0 ? 'pos' : mine.net < 0 ? 'neg' : 'muted'}`}>
+              {mine.net > 0
+                ? `This month you are owed ${inr(mine.net)}`
+                : mine.net < 0
+                  ? `This month you owe ${inr(-mine.net)}`
+                  : 'This month you are square'}
             </p>
             {mySettlements.length > 0 && (
               <div className="settle yours">
-                <h3>Who pays whom</h3>
+                <h3>All time · who pays whom</h3>
+                <p className="fineprint">
+                  Overall{' '}
+                  {myNet > 0
+                    ? `the flat owes you ${inr(myNet)}`
+                    : myNet < 0
+                      ? `you owe the flat ${inr(-myNet)}`
+                      : 'everyone is square'}
+                  .
+                </p>
                 {mySettlements.map((settle, index) => (
                   <div className="settle-row" key={index}>
                     <span>{settle.from === viewer.name ? 'You' : settle.from}</span>
@@ -916,6 +925,7 @@ export function SplitScreen({ payload, month, viewer }) {
               {myNet > 0 ? 'owed to you' : myNet < 0 ? 'you owe' : 'square'}
             </span>
           </div>
+          <p className="label">All time</p>
           <h1 className="big-money">{inr(Math.abs(myNet))}</h1>
           <p className="fineprint">
             {myNet > 0

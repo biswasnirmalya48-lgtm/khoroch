@@ -1,19 +1,27 @@
 // All money is stored in paise (integer). Everything leaving this module is in rupees.
+// Every per-person figure comes from the same allocator in money.js, so a person's
+// share, the month total, and the "who owes whom" ledger always agree.
+import { allocate, ledger, settle, shareFor, sharesOf, toPaise } from './money.js';
+
 export const rs = (paise) => Math.round(paise) / 100;
 
 const monthOf = (d) => (d || '').slice(0, 7);
+const idsOf = (members) => new Set(members.map((m) => m.id));
 
 // What one person actually carries for a single entry.
-export function shareOfPaise(expense, memberId) {
-  const amount = Number(expense.amount) || 0;
-  if (!memberId) return 0;
-  const split = Array.isArray(expense.split_with) ? expense.split_with : [];
-  if (!split.length) return expense.paid_by === memberId ? amount : 0;
-  if (!split.includes(memberId)) return 0;
-  return Math.round(amount / split.length);
+export function shareOfPaise(expense, memberId, memberIds = []) {
+  return shareFor(expense, memberId, memberIds);
 }
 
-function personMonth(rows, member, dim) {
+function bucket(map, key, share) {
+  const entry = map.get(key) || { key, amount: 0, count: 0 };
+  entry.amount += share;
+  entry.count += 1;
+  map.set(key, entry);
+  return entry;
+}
+
+function personMonth(rows, member, dim, ids) {
   if (!member) return null;
   let paid = 0;
   let share = 0;
@@ -26,8 +34,8 @@ function personMonth(rows, member, dim) {
   const byCategory = new Map();
 
   for (const e of rows) {
-    if (e.paid_by === member.id) paid += e.amount;
-    const mine = shareOfPaise(e, member.id);
+    if (e.paid_by === member.id) paid += toPaise(e.amount);
+    const mine = shareFor(e, member.id, ids);
     if (!mine) continue;
     count += 1;
     share += mine;
@@ -35,14 +43,11 @@ function personMonth(rows, member, dim) {
     else personal += mine;
     if (e.method === 'cash') {
       cash += mine;
-      if (e.amount < 20000) smallCash += mine;
+      if (toPaise(e.amount) < 20000) smallCash += mine;
     }
     const day = Number((e.spent_on || '').slice(8, 10));
     if (day >= 1 && day <= dim) daily[day - 1] += mine;
-    const cat = byCategory.get(e.category) || { category: e.category, amount: 0, count: 0 };
-    cat.amount += mine;
-    cat.count += 1;
-    byCategory.set(e.category, cat);
+    bucket(byCategory, e.category, mine);
   }
 
   return {
@@ -54,14 +59,16 @@ function personMonth(rows, member, dim) {
     shared: rs(shared),
     cash: rs(cash),
     online: rs(share - cash),
+    net: rs(paid - share),
     count,
     smallCash: rs(smallCash),
     daily: daily.map(rs),
     byCategory: [...byCategory.values()]
+      .map((c) => ({ category: c.key, amount: rs(c.amount), count: c.count }))
       .sort((a, b) => b.amount - a.amount)
-      .map((c) => ({ ...c, amount: rs(c.amount) }))
   };
 }
+
 const daysIn = (month) => new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0).getDate();
 
 // The flat is in India: "today" must be the IST date, not the UTC one, or a late-night
@@ -76,18 +83,14 @@ export function todayISO(now = new Date()) {
 }
 
 export function monthSummary(expenses, month, members, viewerId) {
+  const ids = idsOf(members);
   const rows = expenses.filter((e) => monthOf(e.spent_on) === month);
-  const total = rows.reduce((s, e) => s + e.amount, 0);
-  const cash = rows.filter((e) => e.method === 'cash').reduce((s, e) => s + e.amount, 0);
+  const total = rows.reduce((s, e) => s + toPaise(e.amount), 0);
+  const cash = rows.filter((e) => e.method === 'cash').reduce((s, e) => s + toPaise(e.amount), 0);
   const online = total - cash;
 
   const byCategory = new Map();
-  for (const e of rows) {
-    const entry = byCategory.get(e.category) || { category: e.category, amount: 0, count: 0 };
-    entry.amount += e.amount;
-    entry.count += 1;
-    byCategory.set(e.category, entry);
-  }
+  for (const e of rows) bucket(byCategory, e.category, toPaise(e.amount));
 
   const dim = daysIn(month);
   const nowMonth = todayISO().slice(0, 7);
@@ -95,17 +98,19 @@ export function monthSummary(expenses, month, members, viewerId) {
   const daysElapsed = isCurrent ? Math.max(1, Number(todayISO().slice(8, 10))) : dim;
   const daily = new Array(dim).fill(0);
   for (const e of rows) {
-    const day = Number(e.spent_on.slice(8, 10));
-    if (day >= 1 && day <= dim) daily[day - 1] += e.amount;
+    const day = Number((e.spent_on || '').slice(8, 10));
+    if (day >= 1 && day <= dim) daily[day - 1] += toPaise(e.amount);
   }
 
   const paid = members.map((m) => ({
     id: m.id,
     name: m.name,
-    amount: rows.filter((e) => e.paid_by === m.id).reduce((s, e) => s + e.amount, 0)
+    amount: rows.filter((e) => e.paid_by === m.id).reduce((s, e) => s + toPaise(e.amount), 0)
   }));
 
-  const smallCash = rows.filter((e) => e.method === 'cash' && e.amount < 20000).reduce((s, e) => s + e.amount, 0);
+  const smallCash = rows
+    .filter((e) => e.method === 'cash' && toPaise(e.amount) < 20000)
+    .reduce((s, e) => s + toPaise(e.amount), 0);
   const onlineCount = rows.filter((e) => e.method === 'online').length;
 
   return {
@@ -117,45 +122,43 @@ export function monthSummary(expenses, month, members, viewerId) {
     onlineCount,
     cashCount: rows.length - onlineCount,
     byCategory: [...byCategory.values()]
-      .sort((a, b) => b.amount - a.amount)
-      .map((c) => ({ ...c, amount: rs(c.amount) })),
+      .map((c) => ({ category: c.key, amount: rs(c.amount), count: c.count }))
+      .sort((a, b) => b.amount - a.amount),
     daily: daily.map(rs),
     daysInMonth: dim,
     daysElapsed,
-    projection: rs(isCurrent ? Math.round((total / daysElapsed) * dim) : total),
-    dailyAverage: rs(Math.round(total / daysElapsed)),
+    projection: rs(isCurrent && daysElapsed > 0 ? Math.round((total / daysElapsed) * dim) : total),
+    dailyAverage: rs(daysElapsed > 0 ? Math.round(total / daysElapsed) : 0),
+    // What a perfectly even split across the flat would cost each person this month.
+    perHead: rs(members.length ? Math.round(total / members.length) : 0),
     paid: paid.map((p) => ({ ...p, amount: rs(p.amount) })),
     smallCash: rs(smallCash),
     avgEntry: rs(rows.length ? Math.round(total / rows.length) : 0),
-    viewer: personMonth(rows, members.find((m) => m.id === viewerId), dim)
+    viewer: personMonth(rows, members.find((m) => m.id === viewerId), dim, ids)
   };
 }
 
 export function yearData(expenses, year, members, viewerId) {
+  const ids = idsOf(members);
   const rows = expenses.filter((e) => (e.spent_on || '').slice(0, 4) === String(year));
   const months = [];
   for (let m = 1; m <= 12; m += 1) {
     const key = `${year}-${String(m).padStart(2, '0')}`;
     const monthRows = rows.filter((e) => monthOf(e.spent_on) === key);
-    const total = monthRows.reduce((s, e) => s + e.amount, 0);
-    const cash = monthRows.filter((e) => e.method === 'cash').reduce((s, e) => s + e.amount, 0);
+    const total = monthRows.reduce((s, e) => s + toPaise(e.amount), 0);
+    const cash = monthRows.filter((e) => e.method === 'cash').reduce((s, e) => s + toPaise(e.amount), 0);
     months.push({ month: key, total: rs(total), cash: rs(cash), online: rs(total - cash), count: monthRows.length });
   }
 
   const byCategory = new Map();
-  for (const e of rows) {
-    const entry = byCategory.get(e.category) || { category: e.category, amount: 0, count: 0 };
-    entry.amount += e.amount;
-    entry.count += 1;
-    byCategory.set(e.category, entry);
-  }
+  for (const e of rows) bucket(byCategory, e.category, toPaise(e.amount));
 
-  const total = rows.reduce((s, e) => s + e.amount, 0);
-  const cash = rows.filter((e) => e.method === 'cash').reduce((s, e) => s + e.amount, 0);
+  const total = rows.reduce((s, e) => s + toPaise(e.amount), 0);
+  const cash = rows.filter((e) => e.method === 'cash').reduce((s, e) => s + toPaise(e.amount), 0);
   const paid = members.map((m) => ({
     id: m.id,
     name: m.name,
-    amount: rs(rows.filter((e) => e.paid_by === m.id).reduce((s, e) => s + e.amount, 0))
+    amount: rs(rows.filter((e) => e.paid_by === m.id).reduce((s, e) => s + toPaise(e.amount), 0))
   }));
 
   return {
@@ -166,37 +169,37 @@ export function yearData(expenses, year, members, viewerId) {
     count: rows.length,
     months,
     byCategory: [...byCategory.values()]
-      .sort((a, b) => b.amount - a.amount)
-      .map((c) => ({ ...c, amount: rs(c.amount) })),
+      .map((c) => ({ category: c.key, amount: rs(c.amount), count: c.count }))
+      .sort((a, b) => b.amount - a.amount),
     paid: paid.sort((a, b) => b.amount - a.amount),
-    viewer: yearViewer(rows, members.find((m) => m.id === viewerId))
+    viewer: yearViewer(rows, members.find((m) => m.id === viewerId), ids)
   };
 }
 
-function yearViewer(rows, member) {
+function yearViewer(rows, member, ids) {
   if (!member) return null;
   let paid = 0;
   let share = 0;
   let count = 0;
-  const months = [];
   const byCategory = new Map();
+  const monthShares = new Map();
 
   for (const e of rows) {
-    const mine = shareOfPaise(e, member.id);
-    if (e.paid_by === member.id) paid += e.amount;
+    if (e.paid_by === member.id) paid += toPaise(e.amount);
+    const mine = shareFor(e, member.id, ids);
     if (!mine) continue;
     count += 1;
     share += mine;
-    const cat = byCategory.get(e.category) || { category: e.category, amount: 0, count: 0 };
-    cat.amount += mine;
-    cat.count += 1;
-    byCategory.set(e.category, cat);
+    bucket(byCategory, e.category, mine);
+    const key = monthOf(e.spent_on);
+    monthShares.set(key, (monthShares.get(key) || 0) + mine);
   }
 
-  const monthKeys = [...new Set(rows.map((e) => monthOf(e.spent_on)))].sort();
+  const yearLabel = (rows[0]?.spent_on || '').slice(0, 4) || String(new Date().getFullYear());
+  const months = [];
   for (let m = 1; m <= 12; m += 1) {
-    const key = `${(rows[0]?.spent_on || '').slice(0, 4)}-${String(m).padStart(2, '0')}`;
-    months.push({ month: key, share: rs(rows.filter((e) => monthOf(e.spent_on) === key).reduce((s, e) => s + shareOfPaise(e, member.id), 0)) });
+    const key = `${yearLabel}-${String(m).padStart(2, '0')}`;
+    months.push({ month: key, share: rs(monthShares.get(key) || 0) });
   }
 
   return {
@@ -204,54 +207,29 @@ function yearViewer(rows, member) {
     name: member.name,
     paid: rs(paid),
     share: rs(share),
+    net: rs(paid - share),
     count,
     months,
-    monthKeys,
+    monthKeys: [...monthShares.keys()].sort(),
     byCategory: [...byCategory.values()]
+      .map((c) => ({ category: c.key, amount: rs(c.amount), count: c.count }))
       .sort((a, b) => b.amount - a.amount)
-      .map((c) => ({ ...c, amount: rs(c.amount) }))
   };
 }
 
+// Paid minus share, all time, per person, plus the shortest way to settle up.
 export function balances(expenses, members) {
-  const net = new Map(members.map((m) => [m.id, 0]));
-  for (const e of expenses) {
-    if (e.paid_by && net.has(e.paid_by)) net.set(e.paid_by, net.get(e.paid_by) + e.amount);
-    const share = Array.isArray(e.split_with) ? e.split_with.filter((id) => net.has(id)) : [];
-    if (!share.length) continue;
-    const each = Math.floor(e.amount / share.length);
-    let remainder = e.amount - each * share.length;
-    for (const id of share) {
-      const extra = remainder > 0 ? 1 : 0;
-      if (remainder > 0) remainder -= 1;
-      net.set(id, net.get(id) - each - extra);
-    }
-  }
-
-  const nameOf = new Map(members.map((m) => [m.id, m.name]));
-  const creditors = [...net.entries()].filter(([, amt]) => amt > 0).map(([id, amt]) => ({ id, amt }));
-  const debtors = [...net.entries()].filter(([, amt]) => amt < 0).map(([id, amt]) => ({ id, amt: -amt }));
-  creditors.sort((a, b) => b.amt - a.amt);
-  debtors.sort((a, b) => b.amt - a.amt);
-
-  const settlements = [];
-  let i = 0;
-  let j = 0;
-  while (i < debtors.length && j < creditors.length) {
-    const pay = Math.min(debtors[i].amt, creditors[j].amt);
-    if (pay > 0) {
-      settlements.push({ from: nameOf.get(debtors[i].id), to: nameOf.get(creditors[j].id), amount: rs(pay) });
-    }
-    debtors[i].amt -= pay;
-    creditors[j].amt -= pay;
-    if (debtors[i].amt <= 0) i += 1;
-    if (creditors[j].amt <= 0) j += 1;
-  }
-
+  const { net, ignoredPaise } = ledger(expenses, members);
   return {
     net: members.map((m) => ({ id: m.id, name: m.name, amount: rs(net.get(m.id) || 0) })),
-    settlements
+    settlements: settle(net, members).map((s) => ({ from: s.from, to: s.to, amount: rs(s.amountPaise) })),
+    ignored: rs(ignoredPaise)
   };
+}
+
+// Same ledger restricted to one month, for the month screen.
+export function monthBalances(expenses, month, members) {
+  return balances(expenses.filter((e) => monthOf(e.spent_on) === month), members);
 }
 
 function csvCell(value) {
@@ -281,3 +259,5 @@ export function toCsv(expenses, members) {
   }
   return lines.join('\n');
 }
+
+export { allocate, sharesOf };

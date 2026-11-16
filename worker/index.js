@@ -2,7 +2,8 @@ import { ensureSchema } from './db.js';
 import { hashPasscode, verifyPasscode, makeSession, readSession, sessionCookie, clearedCookie } from './auth.js';
 import { googleConfigured, googleAuthUrl, googleAccount, emailAllowed, allowedEmails, stateCookie, clearedStateCookie, STATE_COOKIE } from './oauth.js';
 import { aiConfigured, aiParse, aiInsight } from './ai.js';
-import { monthSummary, yearData, balances, toCsv, todayISO, rs } from './report.js';
+import {   monthBalances,
+  monthSummary, yearData, balances, toCsv, todayISO, rs } from './report.js';
 
 const viewerOf = (value, members) => resolveMember(value, members)?.id || null;
 
@@ -328,6 +329,7 @@ async function route(request, env, url) {
       viewer,
       summary: monthSummary(expenses, month, members, viewer),
       balances: balances(expenses, members),
+      monthBalances: monthBalances(expenses, month, members),
       expenses: expenses.filter((e) => (e.spent_on || '').slice(0, 7) === month).slice(0, 400).map(serialize),
       members,
       ai: aiConfigured(env)
