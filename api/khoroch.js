@@ -57,7 +57,15 @@ export default async function handler(req, res) {
     const response = await worker.fetch(request, { ...process.env, DB: getDb() });
 
     res.statusCode = response.status;
-    response.headers.forEach((value, key) => res.setHeader(key, value));
+    // Set-Cookie must stay a list: a joined string would merge cookies into garbage.
+    const cookies =
+      typeof response.headers.getSetCookie === 'function'
+        ? response.headers.getSetCookie()
+        : [response.headers.get('set-cookie')].filter(Boolean);
+    response.headers.forEach((value, key) => {
+      if (key.toLowerCase() !== 'set-cookie') res.setHeader(key, value);
+    });
+    if (cookies.length) res.setHeader('set-cookie', cookies);
     res.end(Buffer.from(await response.arrayBuffer()));
   } catch (err) {
     console.error('vercel api failure', err && err.stack ? err.stack : err);

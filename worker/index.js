@@ -16,8 +16,14 @@ const json = (data, status = 200, headers = {}) =>
   });
 
 const bad = (message, status = 400) => json({ error: message }, status);
-const redirectTo = (location, cookie) =>
-  new Response(null, { status: 303, headers: { location, ...(cookie ? { 'set-cookie': cookie } : {}) } });
+// Cookies must be one Set-Cookie header each; folding two into one string makes browsers
+// treat the second cookie as attributes of the first, which silently drops the session.
+const redirectTo = (location, cookies = []) => {
+  const list = Array.isArray(cookies) ? cookies : [cookies];
+  const headers = new Headers({ location });
+  for (const cookie of list) headers.append('set-cookie', cookie);
+  return new Response(null, { status: 303, headers });
+};
 
 const cookieValue = (request, name) => {
   const header = request.headers.get('cookie') || '';
@@ -161,33 +167,33 @@ async function route(request, env, url) {
     }
     const state = crypto.randomUUID().replace(/-/g, '');
     const redirectUri = `${url.origin}/api/auth/google/callback`;
-    return redirectTo(googleAuthUrl(env, { redirectUri, state }), stateCookie(state));
+    return redirectTo(googleAuthUrl(env, { redirectUri, state }), [stateCookie(state)]);
   }
 
   if (path === '/api/auth/google/callback' && method === 'GET') {
-    if (!googleConfigured(env)) return redirectTo('/?google=off', clearedStateCookie());
+    if (!googleConfigured(env)) return redirectTo('/?google=off', [clearedStateCookie()]);
     const code = url.searchParams.get('code') || '';
     const state = url.searchParams.get('state') || '';
     const expected = cookieValue(request, STATE_COOKIE);
-    if (url.searchParams.get('error')) return redirectTo('/?google=denied', clearedStateCookie());
-    if (!code || !state || !expected || state !== expected) return redirectTo('/?google=state', clearedStateCookie());
+    if (url.searchParams.get('error')) return redirectTo('/?google=denied', [clearedStateCookie()]);
+    if (!code || !state || !expected || state !== expected) return redirectTo('/?google=state', [clearedStateCookie()]);
 
     const household = await loadHousehold(db);
-    if (!household) return redirectTo('/?google=nohousehold', clearedStateCookie());
+    if (!household) return redirectTo('/?google=nohousehold', [clearedStateCookie()]);
 
     let account;
     try {
       account = await googleAccount(env, { code, redirectUri: `${url.origin}/api/auth/google/callback` });
     } catch {
-      return redirectTo('/?google=failed', clearedStateCookie());
+      return redirectTo('/?google=failed', [clearedStateCookie()]);
     }
     if (!emailAllowed(env, account.email)) {
       console.warn('google sign-in blocked for', account.email);
-      return redirectTo('/?google=notallowed', clearedStateCookie());
+      return redirectTo('/?google=notallowed', [clearedStateCookie()]);
     }
 
     const token = await makeSession(household.session_secret, household.id);
-    return redirectTo('/?google=ok', `${sessionCookie(token)}; ${clearedStateCookie()}`);
+    return redirectTo('/?google=ok', [sessionCookie(token), clearedStateCookie()]);
   }
 
   if (path === '/api/setup' && method === 'POST') {

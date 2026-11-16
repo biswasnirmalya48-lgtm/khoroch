@@ -34,6 +34,11 @@ CREATE INDEX IF NOT EXISTS idx_expenses_household_date ON expenses(household_id,
 
 let ready = null;
 
+// Only needed when the binding changes under a warm isolate (tests, local tooling).
+export function resetSchemaCache() {
+  ready = null;
+}
+
 export async function ensureSchema(db) {
   if (!ready) {
     ready = (async () => {
