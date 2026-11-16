@@ -178,7 +178,7 @@ export default function App() {
         </button>
       </header>
 
-      <main className="main">
+      <main className="main" key={tab}>
         {error && (
           <div className="banner error">
             {error}

@@ -12,6 +12,7 @@ import {
   todayDate,
   todayMonth
 } from './api.js';
+import { useCountUp } from './use-count-up.js';
 
 /* ------------------------------------------------------------------ splash */
 
@@ -186,6 +187,8 @@ export function MonthScreen({ payload, loading, month, members, viewer, onPickVi
   const summary = payload?.summary;
   const nameOf = useMemo(() => new Map(members.map((m) => [m.id, m.name])), [members]);
   const viewerId = viewer?.id || '';
+  // Called before any early return so the hook order stays stable.
+  const animated = useCountUp(summary?.viewer ? summary.viewer.share : summary?.total || 0);
 
   if (!payload || !summary) {
     return (
@@ -220,7 +223,7 @@ export function MonthScreen({ payload, loading, month, members, viewer, onPickVi
         <p className="eyebrow">
           {mine ? `Your share · ${monthLabel(month)}` : `${isCurrent ? 'Spent so far in' : 'Total for'} ${monthLabel(month)}`}
         </p>
-        <h1 className="big-money">{inr(shown)}</h1>
+        <h1 className="big-money">{inr(Math.round(animated * 100) / 100)}</h1>
         <div className="hero-meta">
           {mine ? (
             <>
@@ -743,6 +746,7 @@ export function YearScreen({ members, viewerId, pickViewer }) {
   const maxMonth = Math.max(...bars.map((m) => m.total), 1);
   const best = bars.length ? [...bars].sort((a, b) => b.total - a.total)[0] : null;
   const total = mine ? mine.share : data?.total || 0;
+  const animatedTotal = useCountUp(total);
 
   return (
     <div className="stack-lg">
@@ -766,7 +770,7 @@ export function YearScreen({ members, viewerId, pickViewer }) {
         {data && (
           <>
             <p className="eyebrow">{mine ? `Your share · ${year}` : `Whole flat · ${year}`}</p>
-            <h1 className="big-money">{inr(total)}</h1>
+            <h1 className="big-money">{inr(Math.round(animatedTotal * 100) / 100)}</h1>
             <div className="hero-meta">
               {mine ? (
                 <>
