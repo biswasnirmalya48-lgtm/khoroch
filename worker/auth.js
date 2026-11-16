@@ -18,23 +18,63 @@ export function fromB64url(str) {
   return arr;
 }
 
-export async function hashPasscode(passcode, saltB64) {
-  const salt = saltB64 ? fromB64url(saltB64) : crypto.getRandomValues(new Uint8Array(16));
+// Cloudflare's WebCrypto refuses PBKDF2 above 100,000 iterations ("Pbkdf2 failed:
+// iteration counts above 100000 are not supported"), which used to throw during setup
+// and sign-in on the deployed worker. Stay at the ceiling the edge accepts and record
+// the count in the stored value so older hashes can still be read.
+const MAX_ITERATIONS = 100000;
+const LEGACY_ITERATIONS = 150000; // what earlier builds wrote
+const PREFIX = 'pbkdf2';
+
+async function derive(passcode, salt, iterations) {
   const key = await crypto.subtle.importKey('raw', enc.encode(passcode), 'PBKDF2', false, ['deriveBits']);
   const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt, iterations: 150000, hash: 'SHA-256' },
+    { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
     key,
     256
   );
-  return { hash: toB64url(bits), salt: toB64url(salt) };
+  return toB64url(bits);
 }
 
-export async function verifyPasscode(passcode, hash, salt) {
-  const { hash: candidate } = await hashPasscode(passcode, salt);
-  if (candidate.length !== hash.length) return false;
+export async function hashPasscode(passcode, saltB64) {
+  const salt = saltB64 ? fromB64url(saltB64) : crypto.getRandomValues(new Uint8Array(16));
+  const hash = await derive(passcode, salt, MAX_ITERATIONS);
+  return { hash: `${PREFIX}$${MAX_ITERATIONS}$${hash}`, salt: toB64url(salt) };
+}
+
+function constantTimeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
   let diff = 0;
-  for (let i = 0; i < candidate.length; i += 1) diff |= candidate.charCodeAt(i) ^ hash.charCodeAt(i);
+  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
+}
+
+// Accept both the versioned form (pbkdf2$100000$<hash>) and hashes written by older
+// builds. A runtime that refuses an iteration count just skips that candidate.
+function candidatesFor(stored) {
+  const parts = String(stored || '').split('$');
+  if (parts.length === 3 && parts[0] === PREFIX && Number(parts[1]) > 0) {
+    return [{ iterations: Number(parts[1]), hash: parts[2] }];
+  }
+  return [
+    { iterations: MAX_ITERATIONS, hash: stored },
+    { iterations: LEGACY_ITERATIONS, hash: stored }
+  ];
+}
+
+export async function verifyPasscode(passcode, stored, salt) {
+  if (!stored || !salt) return false;
+  const parsedSalt = fromB64url(salt);
+  for (const candidate of candidatesFor(stored)) {
+    let computed;
+    try {
+      computed = await derive(passcode, parsedSalt, candidate.iterations);
+    } catch {
+      continue;
+    }
+    if (constantTimeEqual(computed, candidate.hash)) return true;
+  }
+  return false;
 }
 
 async function hmac(secret, data) {
